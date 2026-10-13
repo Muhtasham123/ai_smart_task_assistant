@@ -1,0 +1,84 @@
+@import 'tailwindcss';
+
+/*
+  Momentum design tokens, copied from the Figma design system page.
+  Every colour / text size below is used by the screens, so changing a value
+  here changes it everywhere.
+*/
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+
+  /* Colours */
+  --color-brand: #4f46d9;
+  --color-brand-hover: #4035b6;
+  --color-brandsoft: #eeedff;
+  --color-ink: #192238;
+  --color-muted: #637087;
+  --color-line: #e2e6ef;
+  --color-canvas: #f6f7fb;
+  --color-graysoft: #eef1f6;
+  --color-night: #233552;
+  --color-navy: #17243b;
+  --color-teal: #0e766e;
+  --color-tealsoft: #e6f5f1;
+  --color-red: #b4233a;
+  --color-redsoft: #fdecf0;
+  --color-amber: #956000;
+  --color-ambersoft: #fff3d8;
+  --color-whitemuted: #b5c3d9;
+
+  /* Text styles (size / line-height / weight) */
+  --text-hero: 40px;
+  --text-hero--line-height: 48px;
+  --text-hero--font-weight: 700;
+
+  --text-h1: 28px;
+  --text-h1--line-height: 36px;
+  --text-h1--font-weight: 700;
+
+  --text-h2: 20px;
+  --text-h2--line-height: 28px;
+  --text-h2--font-weight: 600;
+
+  --text-h3: 16px;
+  --text-h3--line-height: 24px;
+  --text-h3--font-weight: 600;
+
+  --text-label: 14px;
+  --text-label--line-height: 20px;
+  --text-label--font-weight: 500;
+
+  --text-body: 14px;
+  --text-body--line-height: 22px;
+  --text-body--font-weight: 400;
+
+  --text-small: 12px;
+  --text-small--line-height: 18px;
+  --text-small--font-weight: 400;
+
+  --text-tiny: 11px;
+  --text-tiny--line-height: 16px;
+  --text-tiny--font-weight: 500;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/*
+  The date field in Figma shows a small square glyph on the right.
+  We hide the browser's own calendar button and draw that glyph ourselves,
+  but keep the native button clickable on top of it.
+*/
+input[type='date']::-webkit-calendar-picker-indicator {
+  position: absolute;
+  right: 12px;
+  width: 18px;
+  height: 18px;
+  opacity: 0;
+  cursor: pointer;
+}
