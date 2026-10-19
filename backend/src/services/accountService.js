@@ -47,13 +47,14 @@ class AccountService {
         return {
             id:account.id,
             username:account.username,
-            firstname,
-            lastname,
-            dateOfBirth,
+            firstname:account.firstname,
+            lastname:account.lastname,
+            dateOfBirth:account.dateOfBirth,
             email:account.email,
             isActive:account.isActive,
             isAdmin:account.isAdmin,
-            createdAt:account.createdAt
+            createdAt:account.createdAt,
+            updatedAt:account.updatedAt
         }
     }
 
@@ -84,7 +85,8 @@ class AccountService {
                     username,
                     firstname,
                     lastname,
-                    dateOfBirth
+                    dateOfBirth,
+                    updatedAt:new Date(Date.now())
                 } 
             }
         )
@@ -100,7 +102,8 @@ class AccountService {
             email:updatedAccount.email,
             isActive:updatedAccount.isActive,
             isAdmin:updatedAccount.isAdmin,
-            createdAt:updatedAccount.createdAt
+            createdAt:updatedAccount.createdAt,
+            updatedAt:updatedAccount.updatedAt
         }
     }
 
@@ -127,7 +130,8 @@ class AccountService {
             email:deletedAccount.email,
             isActive:deletedAccount.isActive,
             isAdmin:deletedAccount.isAdmin,
-            createdAt:deletedAccount.createdAt
+            createdAt:deletedAccount.createdAt,
+            updatedAt:deletedAccount.updatedAt
         }
     }
 
@@ -152,7 +156,8 @@ class AccountService {
             {
                 where:{id:accountId},
                 data:{
-                    password:hashedPassword
+                    password:hashedPassword,
+                    updatedAt:new Date(Date.now())
                 }
             }
         )
@@ -166,7 +171,8 @@ class AccountService {
             email:updatedAccount.email,
             isActive:updatedAccount.isActive,
             isAdmin:updatedAccount.isAdmin,
-            createdAt:updatedAccount.createdAt
+            createdAt:updatedAccount.createdAt,
+            updatedAt:updatedAccount.updatedAt
         }
     }
 
@@ -186,7 +192,8 @@ class AccountService {
             email:account.email,
             isActive:account.isActive,
             isAdmin:account.isAdmin,
-            createdAt:account.createdAt
+            createdAt:account.createdAt,
+            updatedAt:account.updatedAt
         }
     }
 
@@ -253,7 +260,8 @@ class AdminAccountService extends AccountService{
                     email: true,
                     isActive: true,
                     isAdmin: true,
-                    createdAt: true
+                    createdAt: true,
+                    updatedAt: true
                 }
             }
         )
@@ -271,7 +279,10 @@ class AdminAccountService extends AccountService{
         const inactivatedAccount = await this.prisma.user.update(
             {
                 where: {id:accountId},
-                data:{isActive:status}
+                data:{
+                    isActive:status,
+                    updatedAt:new Date(Date.now())
+                }
             }
         )
         
@@ -284,7 +295,8 @@ class AdminAccountService extends AccountService{
             email:inactivatedAccount.email,
             isActive:inactivatedAccount.isActive,
             isAdmin:inactivatedAccount.isAdmin,
-            createdAt:inactivatedAccount.createdAt
+            createdAt:inactivatedAccount.createdAt,
+            updatedAt:inactivatedAccount.updatedAt
         }
     }
 }

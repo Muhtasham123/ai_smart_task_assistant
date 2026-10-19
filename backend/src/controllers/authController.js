@@ -82,7 +82,6 @@ class AuthController {
             }
 
             const resetToken = await this.authService.forgotPassword(email)
-            //send token via email
 
             res.status(200).json({
                 success:true,
@@ -109,12 +108,12 @@ class AuthController {
                 throw new BadRequestError("Password and reset token are required")
             }
 
-            await this.authService.resetPassword(resetToken, newPassword)
+            const updatedAccount = await this.authService.resetPassword(resetToken, newPassword)
 
             res.status(200).json({
                 success:true,
                 message:"Password updated successfully",
-                data:{}
+                data:updatedAccount 
             })
         } catch (error) {
             next(
