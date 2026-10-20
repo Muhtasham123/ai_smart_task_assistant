@@ -21,7 +21,7 @@ model User {
   updatedAt   DateTime @default(now())
 }
 
-model PasswordResetToken {
+model Token {
   id          Int @id @default(autoincrement())
   tokenHash   String  @unique 
   expiryTime  DateTime @default(now())

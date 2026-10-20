@@ -3,15 +3,15 @@
 //user related to accounts
 
 const {ConflictError, NotFoundError, UnauthorizedError} = require("../errors/appError")
-
 const bcrypt = require("bcrypt")
+const {redisClient} = require("../config/redisClient")
 
 class AccountService {
     constructor(prisma){
         this.prisma = prisma
     }
 
-    createAccount = async(userAccountDetails) => {
+    signup = async(userAccountDetails) => {
         const {
             username, 
             firstname, 
@@ -26,23 +26,67 @@ class AccountService {
             throw new ConflictError("Username or email already exists")
         }
 
-        //verify the email with OPT
-        //if not verified throw error
-
         //hash password
         const hashedPassword = await bcrypt.hash(password, 10)
+
+        //create email verification token and send email
+        const token = this.#createEmailVerificationToken()
+        const tokenHash = this.#hashEmailVerificationToken(token)
+        
+        //store credentials temporarily for 15 min in redis against token
+        await redisClient.multi()
+        .hSet(`signup:verification:${tokenHash}`, {
+            username,
+            firstname,
+            lastname,
+            dateOfBirth: dateOfBirth ? new Date(dateOfBirth).toISOString() : "",
+            email,
+            password:hashedPassword
+        }).expire(`signup:verification:${tokenHash}`, 900)
+        .exec()
+
+        //send token to the user
+        const emailObject = {
+            from: process.env.RESEND_FROM_EMAIL,
+            to: email,
+            subject: "Email verification link",
+            html: `<a href="${process.env.BASE_EMAIL_VERIFICATION_URL}/${token}">Click here to verify</a>`
+        }
+
+        const data = await this.#sendEmail(emailObject)
+        return token
+    }
+
+    createAccount = async(verificationToken)=>{
+        const tokenHash = this.#hashEmailVerificationToken(verificationToken)
+
+        //getting credentials using token from redis(if expired, key will not be found)
+        const userData = await redisClient.hGetAll(`signup:verification:${tokenHash}`)
+
+        if(Object.keys(userData).length === 0){
+            throw new UnauthorizedError("Invalid or expired verification token")
+        }
+
+        //check if account (username or email) already exists
+        if(await this.#usernameOrEmailExists(userData.username, userData.email)){
+            await redisClient.del(`signup:verification:${tokenHash}`)
+            throw new ConflictError("Username or email already exists")
+        }
 
         //store user in database
         const account = await this.prisma.user.create({
             data:{
-                username,
-                firstname,
-                lastname,
-                dateOfBirth,
-                email,
-                password:hashedPassword
+                username:userData.username,
+                firstname:userData.firstname,
+                lastname:userData.lastname,
+                dateOfBirth:userData.dateOfBirth ? new Date(userData.dateOfBirth):null,
+                email:userData.email,
+                password:userData.password
             }
         })
+
+        //removing the key from redis
+        await redisClient.del(`signup:verification:${tokenHash}`)
         
         return {
             id:account.id,
@@ -238,6 +282,27 @@ class AccountService {
             return true
         }
         return false
+    }
+
+    #createEmailVerificationToken = ()=>{
+        const token = crypto.randomBytes(32).toString("hex")
+        return token
+    }
+
+    #hashEmailVerificationToken = (token)=>{
+        const tokenHash = crypto.createHash("sha256").update(token).digest("hex")
+        return tokenHash
+    }
+
+    #sendEmail = async(emailObject)=>{
+        const resend = new Resend(process.env.RESEND_API_KEY)
+        const {data, error} = await resend.emails.send(emailObject)
+
+        if(error){
+            throw new Error(`Failed to send password reset email : ${error.message}`)
+        }
+
+        return data
     }
 }
 

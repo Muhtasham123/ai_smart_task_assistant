@@ -11,14 +11,40 @@ class AccountController {
         this.accountService = accountService
     }
 
-    createAccount = async(req, res, next) => {
+    signup = async(req, res, next) => {
         try {
             const userAccountDetails = req.body
 
             const inputsValidator = new AccountCreationInputsValidator()
             inputsValidator.validate(userAccountDetails)
 
-            const account = await this.accountService.createAccount(userAccountDetails)
+            await this.accountService.signup(userAccountDetails)
+
+            res.status(201).json({
+                success:true,
+                message:"Verification email sent to the user",
+            })
+
+        } catch (error) {
+            next(
+                new ErrorModel(
+                    error, 
+                    "signup", 
+                    "AccountController"
+                )   
+            )
+        }
+
+    }
+
+    createAccount = async(req, res, next)=>{
+        try {
+            const {verificationToken} = req.body
+            if(!verificationToken){
+                throw new BadRequestError("Verification Token is required")
+            }
+
+            const account = await this.accountService.createAccount(verificationToken)
 
             res.status(201).json({
                 success:true,
@@ -35,7 +61,6 @@ class AccountController {
                 )   
             )
         }
-
     }
 
     updateAccount = async(req, res, next) => {

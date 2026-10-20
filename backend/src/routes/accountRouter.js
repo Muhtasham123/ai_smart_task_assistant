@@ -17,7 +17,9 @@ const adminAccountController = new AdminAccountController(adminAccountService)
 //Common Admin and General User Routes
 const accountRouter = express.Router()
 
-accountRouter.post("/", accountController.createAccount)
+accountRouter.post("/", accountController.signup)
+
+accountRouter.post("/createaccount", accountController.createAccount)
 
 accountRouter.put("/changepassword/:id", authenticate(authService), isAccountOwner, accountController.changePassword)
 

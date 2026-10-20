@@ -65,20 +65,22 @@ class AuthService{
         const expiryTime = new Date(new Date().getTime() + 15*60*1000) 
 
         //save token in the DB and send it via email
-        const savedToken = await this.prisma.passwordResetToken.create({
+        const savedToken = await this.prisma.token.create({
             data:{
                 tokenHash,
                 expiryTime,
                 userId:account.id
             }
         })
-        const resend = new Resend(process.env.RESEND_API_KEY)
-        const {data, error} = await resend.emails.send({
-            from: "aismarttask@gmail.com",
+
+        const emailObject = {
+            from: process.env.RESEND_FROM_EMAIL,
             to: account.email,
             subject: "Reset password link",
             html: `<a href="${process.env.BASE_RESET_PAGE_URL}/${token}">Click here</a>`
-        })
+        }
+
+        const data = await this.#sendEmail(emailObject)
 
         return token
     }
@@ -92,7 +94,7 @@ class AuthService{
         //update password and delete token in an atomic transaction
         const updatedAccount = await this.prisma.$transaction(async(tx)=>{
             //validate token
-            const savedToken = await tx.passwordResetToken.findUnique({
+            const savedToken = await tx.token.findUnique({
                 where:{
                     tokenHash
                 }
@@ -117,8 +119,8 @@ class AuthService{
                 }
             })
 
-            //invalidate opt (later)
-            await tx.passwordResetToken.delete({
+            //invalidate token
+            await tx.token.delete({
                 where: {
                     id: savedToken.id
                 }
@@ -175,6 +177,17 @@ class AuthService{
     #hashPasswordResetToken = (token)=>{
         const tokenHash = crypto.createHash("sha256").update(token).digest("hex")
         return tokenHash
+    }
+
+    #sendEmail = async(emailObject)=>{
+        const resend = new Resend(process.env.RESEND_API_KEY)
+        const {data, error} = await resend.emails.send(emailObject)
+
+        if(error){
+            throw new Error(`Failed to send password reset email : ${error.message}`)
+        }
+
+        return data
     }
 
 }
