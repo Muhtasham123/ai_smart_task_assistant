@@ -5,6 +5,8 @@
 const {ConflictError, NotFoundError, UnauthorizedError} = require("../errors/appError")
 const bcrypt = require("bcrypt")
 const {redisClient} = require("../config/redisClient")
+const crypto = require("crypto")
+const {Resend} = require("resend")
 
 class AccountService {
     constructor(prisma){

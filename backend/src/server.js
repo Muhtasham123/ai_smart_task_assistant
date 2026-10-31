@@ -1,23 +1,17 @@
-require("dotenv").config();
-const express = require("express")
-const {accountRouter} = require("./routes/accountRouter")
-const {authRouter} = require("./routes/authRouter")
-const cookieParser = require("cookie-parser")
-const {errorHandler} = require("./middlewares/errorHandlingMiddleware")
-const {redisClient} = require("./config/redisClient")
-const {globalRateLimiter} = require("./middlewares/rateLimitMiddlewares")
+const app = require("./app")
+const seedAdmin = require("./seedAdmin.js")
 
-const app = express()
+const startServer = async()=>{
+    try {
+        await seedAdmin()
+        app.listen(process.env.PORT, async()=>{    
+           console.log("Server is listening on port:", process.env.PORT)
+        })
 
-app.use(express.json())
-app.use(cookieParser())
-app.use("/api", globalRateLimiter) // applying rate limiting on api requests
+    } catch (error) {
+        console.log("Server startup failed : " + error.message)
+        process.exitCode = 1;
+    }
+}
 
-app.use("/api/account", accountRouter)
-app.use("/api/auth", authRouter)
-
-app.use(errorHandler)
-
-app.listen(process.env.PORT, ()=>{    
-    console.log("Server is listening on port:", process.env.PORT)
-})
+startServer()

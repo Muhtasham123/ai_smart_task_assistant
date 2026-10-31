@@ -42,8 +42,15 @@ class AuthService{
         return {
             token,
             id:actualAccount.id,
+            firstname:actualAccount.firstname,
+            lastname:actualAccount.lastname,
+            dateOfBirth:actualAccount.dateOfBirth,
             username:actualAccount.username,
-            email:actualAccount.email
+            email:actualAccount.email,
+            isAdmin:actualAccount.isAdmin,
+            isActive:actualAccount.isActive,
+            createdAt:actualAccount.createdAt,
+            updatedAt:actualAccount.updatedAt
         }
     }
 

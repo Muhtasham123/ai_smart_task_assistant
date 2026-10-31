@@ -19,7 +19,7 @@ const accountRouter = express.Router()
 
 accountRouter.post("/", accountController.signup)
 
-accountRouter.post("/createaccount", accountController.createAccount)
+accountRouter.post("/create", accountController.createAccount)
 
 accountRouter.put("/changepassword/:id", authenticate(authService), isAccountOwner, accountController.changePassword)
 

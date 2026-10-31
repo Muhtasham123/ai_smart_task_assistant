@@ -32,8 +32,15 @@ class AuthController {
                 message:"Login successful",
                 data:{
                     id:account.id,
+                    firstname:account.firstname,
+                    lastename:account.lastname,
+                    dateOfBirth:account.dateOfBirth,
                     username:account.username,
-                    email:account.email
+                    email:account.email,
+                    isAdmin:account.isAdmin,
+                    isActive:account.isActive,
+                    createdAt:account.createdAt,
+                    updatedAt:account.updatedAt
                 }
             })
             
