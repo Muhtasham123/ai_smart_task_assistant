@@ -120,7 +120,7 @@ class AccountService {
 
         //check if username already exists
         if(await this.#usernameOrEmailExists(username, null, accountId)){
-            throw new ConflictError("Username or email already exists")
+            throw new ConflictError("Username already exists")
         }
 
         //update the user data in the database
@@ -131,7 +131,7 @@ class AccountService {
                     username,
                     firstname,
                     lastname,
-                    dateOfBirth,
+                    dateOfBirth:dateOfBirth ? new Date(dateOfBirth) : null,
                     updatedAt:new Date(Date.now())
                 } 
             }
