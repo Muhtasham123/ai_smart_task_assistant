@@ -137,8 +137,6 @@ class AccountService {
             }
         )
 
-        //later there might be more updations like profile picture
-
         return {
             id:updatedAccount.id,
             username:updatedAccount.username,

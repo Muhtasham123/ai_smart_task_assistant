@@ -11,6 +11,7 @@ const connectTestDataBase = async()=>{
 const createTestUserAccount = async()=>{
     const hashedPassword1 = await bcrypt.hash("johnfernandes@123",10)
     const hashedPassword2 = await bcrypt.hash("lindawatson@123",10)
+    const hashedPassword3 = await bcrypt.hash("stacywilliams@123",10)
     const userAccount1 = await prisma.user.create({
         data:{
             username:"john_123",
@@ -31,7 +32,20 @@ const createTestUserAccount = async()=>{
             dateOfBirth:new Date("2005-03-01")
         }
     })
-    return {userAccount1, userAccount2}
+
+    const deactivatedAccount = await prisma.user.create({
+        data:{
+            username:"stacy_123",
+            firstname:"stacy",
+            lastname:"williams",
+            email:"stacywilliams@gmail.com",
+            password:hashedPassword3,
+            dateOfBirth:new Date("2005-03-01"),
+            isActive:false
+        }
+    })
+
+    return {userAccount1, userAccount2, deactivatedAccount}
 }
 
 //Function for creating a test admin account record in database
@@ -62,6 +76,7 @@ const cleanupTestDatabase = async()=>{
     }
 
     await prisma.user.deleteMany()
+    await prisma.token.deleteMany()
 }
 
 //Function for disconnecting database

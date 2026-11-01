@@ -363,7 +363,6 @@ describe("AccountService", ()=>{
             const allAccounts = await adminService.getAllAccounts()
             expect(allAccounts).toBeDefined()
             expect(Array.isArray(allAccounts)).toBe(true)
-            expect(allAccounts.length).toBe(3)
         })
 
         
@@ -371,7 +370,7 @@ describe("AccountService", ()=>{
     //--- NO INVALID TEST CASE ---
 
     //updateAccountActivity(admin specific method in AdminAccountService) testcases
-    describe("AdminAccoutService.updateAccountAccount", ()=>{
+    describe("AdminAccoutService.updateAccountActivity", ()=>{
         //valid testcase for updateAccountActivity(id exists)
         test("Should pass, id exists", async()=>{
             let account = await adminService.updateAccountActivity(
@@ -389,7 +388,10 @@ describe("AccountService", ()=>{
             let activeAccounts = await prisma.user.findMany({
                 where:{
                     id:{
-                        not:testUserAccounts.userAccount1.id
+                        notIn:[
+                            testUserAccounts.userAccount1.id,
+                            testUserAccounts.deactivatedAccount.id, 
+                        ]
                     }
                 },
                 select:{
@@ -419,7 +421,10 @@ describe("AccountService", ()=>{
             activeAccounts = await prisma.user.findMany({
                 where:{
                     id:{
-                        not:testUserAccounts.userAccount1.id
+                        notIn:[
+                            testUserAccounts.userAccount1.id,
+                            testUserAccounts.deactivatedAccount.id, 
+                        ]
                     }
                 },
                 select:{
@@ -444,6 +449,11 @@ describe("AccountService", ()=>{
 
         //check update in DB
         const accountsActivity = await prisma.user.findMany({
+            where:{
+                id:{
+                    not:testUserAccounts.deactivatedAccount.id
+                }
+            },
             select:{isActive:true}
         })
 

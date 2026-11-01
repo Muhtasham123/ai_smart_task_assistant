@@ -38,7 +38,6 @@ class AuthService{
         //create token
         const token = this.#createAuthToken(actualAccount.username, actualAccount.id, actualAccount.isAdmin)
 
-        //return token
         return {
             token,
             id:actualAccount.id,
