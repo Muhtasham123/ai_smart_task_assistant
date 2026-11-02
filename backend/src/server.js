@@ -1,3 +1,5 @@
+require("dotenv").config();
+const {redisClient} = require("./config/redisClient.js")
 const app = require("./app")
 const seedAdmin = require("./seedAdmin.js")
 

@@ -1,10 +1,8 @@
-require("dotenv").config();
 const express = require("express")
 const {accountRouter} = require("./routes/accountRouter.js")
 const {authRouter} = require("./routes/authRouter.js")
 const cookieParser = require("cookie-parser")
 const {errorHandler} = require("./middlewares/errorHandlingMiddleware.js")
-const {redisClient} = require("./config/redisClient.js")
 const {globalRateLimiter} = require("./middlewares/rateLimitMiddlewares.js")
 
 const app = express()

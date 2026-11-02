@@ -2,6 +2,8 @@ const {BadRequestError, ErrorModel} = require("../errors/appError")
 const {LoginInputsValidator} = require("../validators/authInputsValidators") 
 
 class AuthController {
+    static COOKIE_EXPIRY_TIME = 3 * 60 * 1000 * 1000
+
     constructor(authService){
         this.authService = authService
     }
@@ -24,7 +26,7 @@ class AuthController {
                 httpOnly:true,
                 secure:false,
                 sameSite:"lax",
-                maxAge: 3 * 60 * 60 * 1000
+                maxAge: AuthController.COOKIE_EXPIRY_TIME
             })
 
             res.status(200).json({

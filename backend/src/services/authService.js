@@ -5,6 +5,7 @@ const crypto = require("crypto")
 const {Resend} = require("resend")
 
 class AuthService{
+    static TOKEN_EXPIRY_TIME = "3h"
     constructor(prisma){
         this.prisma = prisma
     }
@@ -169,7 +170,7 @@ class AuthService{
             },
             process.env.JWT_SECRET, 
             {
-                expiresIn:"3h"
+                expiresIn:AuthService.TOKEN_EXPIRY_TIME
             })
 
             return token
