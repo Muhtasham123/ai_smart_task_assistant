@@ -15,6 +15,8 @@ const {
 } = require("../setup/redisClient")
 const {AuthController} = require("../../src/controllers/authController")
 const jwt = require("jsonwebtoken")
+const bcrypt = require("bcrypt")
+const crypto = require("crypto")
 
 //Testing the authentication related APIs
 describe("/api/auth", ()=>{
@@ -300,12 +302,222 @@ describe("/api/auth", ()=>{
     //forgot password api testcases
     describe("POST : /api/auth/forgotpassword", ()=>{
         //valid testcases for forgot password api
+        test("Should pass, email is given and exists", async()=>{
+            //updating email of userAccount1 to a valid email
+            //because forgotpassword api sends a link through
+            //email using resend and only registered email
+            //can recieve the mail in free tier
+            await prisma.user.update({
+                where:{
+                    id:testUserAccounts.userAccount1.id
+                },
+                data:{
+                    email:"muhtashamfarooqi433@gmail.com"
+                }
+            })
+
+            //hitting the api
+            const response = await request(app).post("/api/auth/forgotpassword").send({
+                email:"muhtashamfarooqi433@gmail.com"
+            })
+
+            //checking whether the token was stored in DB or not
+            //against this user
+            const token = await prisma.token.findFirst({
+                where:{
+                    userId:testUserAccounts.userAccount1.id
+                }
+            })
+
+            expect(token).toBeDefined()
+            expect(response.statusCode).toBe(200)
+            expect(response.body.message).toBe("Token sent to the user")
+            expect(response.body.success).toBe(true)
+        })
+
         //invalid testcases for forgot password api
+
+        //email not provided
+        test("Should reject, email not provided", async()=>{
+            const response = await request(app).post("/api/auth/forgotpassword").send({})
+
+            //checking whether the token was stored in DB or not
+            //against this user
+            const token = await prisma.token.findFirst({
+                where:{
+                    userId:testUserAccounts.userAccount1.id
+                }
+            })
+
+            expect(token).toBeNull()
+            expect(response.statusCode).toBe(400)
+            expect(response.body.message).toBe("Email is required")
+            expect(response.body.success).toBe(false)
+        })
+
+        //email does not exist
+        test("Should reject, email does not exist", async()=>{
+            const response = await request(app).post("/api/auth/forgotpassword").send({
+                email:"nonexistentemail@gmail.com"
+            })
+
+            //checking whether the token was stored in DB or not
+            //against this user
+            const token = await prisma.token.findFirst({
+                where:{
+                    userId:testUserAccounts.userAccount1.id
+                }
+            })
+
+            expect(token).toBeNull()
+            expect(response.statusCode).toBe(404)
+            expect(response.body.message).toBe("If an account exists with this email, a reset link is sent on this email")
+            expect(response.body.success).toBe(false) 
+        })
     })
 
     //reset password api testcases
     describe("PUT : /api/auth/resetpassword", ()=>{
         //valid testcases for reset password api
+        test("Should pass, password and reset token are provided", async()=>{
+            //creating a known mock token in DB against userAccount1
+            await prisma.token.create({
+                data:{
+                    tokenHash:crypto.createHash("sha256").update(process.env.MOCK_PASSWORD_RESET_TOKEN).digest("hex"),
+                    expiryTime:new Date(new Date().getTime() + 15*60*1000),
+                    userId:testUserAccounts.userAccount1.id
+                }
+            })
+
+            //hitting the api
+            const response = await request(app).put("/api/auth/resetpassword").send({
+                resetToken:process.env.MOCK_PASSWORD_RESET_TOKEN,
+                newPassword:"newpassword@123"
+            })
+
+            expect(response.statusCode).toBe(200)
+            expect(response.body.message).toBe("Password updated successfully")
+            expect(response.body.success).toBe(true)
+
+            //checking whether the password was updated in DB or not
+            const account = await prisma.user.findUnique({
+                where:{
+                    id:testUserAccounts.userAccount1.id
+                }
+            })
+
+            const isPasswordUpdated = await bcrypt.compare("newpassword@123", account.password)
+            expect(isPasswordUpdated).toBe(true)
+
+            //checking whether token was deleted from DB
+            const token = await prisma.token.findUnique({
+                where:{
+                    tokenHash:crypto.createHash("sha256").update(process.env.MOCK_PASSWORD_RESET_TOKEN).digest("hex")
+                }
+            })
+            expect(token).toBeNull()
+
+            //hitting login with old and new passwords
+            //to make sure only new password works
+            const oldPasswordLoginResponse = await request(app).post("/api/auth/login").send({
+                username:testUserAccounts.userAccount1.username,
+                password:"johnfernandes@123"
+            })
+
+            expect(oldPasswordLoginResponse.statusCode).toBe(401)
+            expect(oldPasswordLoginResponse.body.message).toBe("Invalid username, email or password")
+            expect(oldPasswordLoginResponse.body.success).toBe(false)
+
+            const newPasswordLoginResponse = await request(app).post("/api/auth/login").send({
+                username:testUserAccounts.userAccount1.username,
+                password:"newpassword@123"
+            })
+
+            expect(newPasswordLoginResponse.statusCode).toBe(200)
+            expect(newPasswordLoginResponse.body.message).toBe("Login successful")
+            expect(newPasswordLoginResponse.body.success).toBe(true)
+        })
+
         //invalid testcases for reset password api
+        test.each([
+            ["both token and new password are missing", {}],
+            ["token is missing", {newPassword:"newpassword@123"}],
+            ["new password is missing", {resetToken:process.env.MOCK_PASSWORD_RESET_TOKEN}],
+
+        ])("Should reject, %s", async(description, body)=>{
+            const response = await request(app).put("/api/auth/resetpassword").send(body)
+            expect(response.statusCode).toBe(400)
+            expect(response.body.success).toBe(false)
+            expect(response.body.message).toBe("Password and reset token are required")
+
+            //makign sure the password was not updated
+            const account = await prisma.user.findUnique({
+                where:{
+                    id:testUserAccounts.userAccount1.id
+                }
+            })
+
+            const isPasswordNotUpdated = await bcrypt.compare("johnfernandes@123", account.password)
+            expect(isPasswordNotUpdated).toBe(true)
+        })
+
+        //invalid reset token
+        test("Should reject, invalid reset token is provided", async () => {
+
+            const response = await request(app).put("/api/auth/resetpassword").send({
+                    resetToken: "invalid_random_token",
+                    newPassword: "newpassword@123"
+            })
+        
+            expect(response.statusCode).toBe(401)
+            expect(response.body.success).toBe(false)
+            expect(response.body.message).toBe("Invalid reset token")
+        
+            // Checking that the original password remains unchanged
+            const account = await prisma.user.findUnique({
+                where: {
+                    id: testUserAccounts.userAccount1.id
+                }
+            })
+        
+            const isOldPasswordValid = await bcrypt.compare(
+                "johnfernandes@123",
+                account.password
+            )
+        
+            expect(isOldPasswordValid).toBe(true)
+        })
+
+        //expired token testcase
+        test("Should reject, expired token given", async()=>{
+            //making a known expired token in DB against userAccount1
+            await prisma.token.create({
+                data:{
+                    tokenHash:crypto.createHash("sha256").update(process.env.MOCK_PASSWORD_RESET_TOKEN).digest("hex"),
+                    expiryTime:new Date(Date.now() - 60 * 1000),
+                    userId:testUserAccounts.userAccount1.id
+                }
+            })
+
+            //hitting the api
+            const response = await request(app).put("/api/auth/resetpassword").send({
+                resetToken:process.env.MOCK_PASSWORD_RESET_TOKEN,
+                newPassword:"newpassword@123"
+            })
+
+            expect(response.statusCode).toBe(401)
+            expect(response.body.message).toBe("Your reset token has been expired")
+            expect(response.body.success).toBe(false)
+
+            //checking whether the password was updated in DB or not
+            const account = await prisma.user.findUnique({
+                where:{
+                    id:testUserAccounts.userAccount1.id
+                }
+            })
+
+            const isPasswordUpdated = await bcrypt.compare("newpassword@123", account.password)
+            expect(isPasswordUpdated).toBe(false)
+        })
     })
 })

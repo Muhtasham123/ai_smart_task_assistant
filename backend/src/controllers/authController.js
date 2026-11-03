@@ -84,7 +84,7 @@ class AuthController {
 
     forgotPassword = async(req, res, next) => {
         try {
-            const email = req.body.email
+            const {email} = req.body
 
             if(!email){
                 throw new BadRequestError("Email is required")

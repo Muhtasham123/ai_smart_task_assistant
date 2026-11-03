@@ -1,5 +1,5 @@
 const jwt = require("jsonwebtoken")
-const {UnauthorizedError} = require("../errors/appError.js")
+const {UnauthorizedError,NotFoundError} = require("../errors/appError.js")
 const bcrypt = require("bcrypt")
 const crypto = require("crypto")
 const {Resend} = require("resend")
@@ -61,7 +61,7 @@ class AuthService{
         })
 
         if(!account){
-            throw new UnauthorizedError("If an account exists with this email, a reset link is sent on this email.")
+            throw new NotFoundError("If an account exists with this email, a reset link is sent on this email")
         }
 
         //generate token and hash it
