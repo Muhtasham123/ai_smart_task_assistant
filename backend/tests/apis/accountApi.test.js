@@ -19,6 +19,11 @@ const jwt = require("jsonwebtoken")
 const bcrypt = require("bcrypt")
 const crypto = require("crypto")
 const { redisClient } = require("../../src/config/redisClient")
+const {
+    loginMockUser, 
+    getAccountFromDb,
+    getTokenFromRedis
+} = require("../utils")
 
 //Testing all the account related apis
 describe("/api/account", ()=>{
@@ -75,10 +80,7 @@ describe("/api/account", ()=>{
 
             //checking whether the verification token was
             //created in redis against provided credentials
-            const result = await redisClient.scan("0", {
-                MATCH:"signup:verification:*",
-                COUNT:100
-            })
+            const result = await getTokenFromRedis(redisClient)
 
             expect(result.keys.length).toBeGreaterThan(0)
 
@@ -111,10 +113,7 @@ describe("/api/account", ()=>{
 
             //checking whether the verification token was
             //created in redis against provided credentials(should not be created)
-            const result = await redisClient.scan("0", {
-                MATCH:"signup:verification:*",
-                COUNT:100
-            })
+            const result = await getTokenFromRedis(redisClient)
 
             expect(result.keys).toHaveLength(0)
         })
@@ -148,21 +147,14 @@ describe("/api/account", ()=>{
 
             //checking whether the record was created in the
             //DB or not
-            const account = await prisma.user.findUnique({
-                where:{
-                    id:response.body.data.id
-                }
-            })
+            const account = await getAccountFromDb(prisma, {id:response.body.data.id})
 
             expect(account).not.toBeNull()
             expect(account.username).toBe("muhtasham_123")
             
             //checking whether the token was removed
             //from redis after successfull account creation
-            const result = await redisClient.scan("0", {
-                MATCH:"signup:verification:*",
-                COUNT:100
-            })
+            const result = await getTokenFromRedis(redisClient)
 
             expect(result.keys).toHaveLength(0)
         })
@@ -190,11 +182,7 @@ describe("/api/account", ()=>{
 
             //checking whether the record was created in the
             //DB or not (should not be created)
-            const account = await prisma.user.findUnique({
-                where:{
-                    username:"muhtasham_123"
-                }
-            })
+            const account = await getAccountFromDb(prisma, {username:"muhtasham_123"})
 
             expect(account).toBeNull()
 
@@ -231,11 +219,7 @@ describe("/api/account", ()=>{
 
             //checking whether the record was created in the
             //DB or not (should not be created)
-            const account = await prisma.user.findUnique({
-                where:{
-                    username:"muhtasham_123"
-                }
-            })
+            const account = await getAccountFromDb(prisma, {username:"muhtasham_123"})
 
             expect(account).toBeNull()
 
@@ -281,11 +265,7 @@ describe("/api/account", ()=>{
 
             //checking whether the record was created in the
             //DB or not (should not be created)
-            const account = await prisma.user.findUnique({
-                where:{
-                    username:"muhtasham_123"
-                }
-            })
+            const account = await getAccountFromDb(prisma, {username:"muhtasham_123"})
 
             expect(account).toBeNull()
 
@@ -295,25 +275,577 @@ describe("/api/account", ()=>{
     //testcases for update account api
     describe("PUT : /api/account/:id", ()=>{
         //valid testcases for update account api
+        test("Should pass, user is logged in, account exists and all inputs are valid", async()=>{
+            const agent = request.agent(app)
+
+            //logging in
+            await loginMockUser(
+                agent,
+                testUserAccounts.userAccount1.username,
+                "johnfernandes@123"
+            )
+
+            //hitting update api
+            const response = await agent.put(`/api/account/${testUserAccounts.userAccount1.id}`).send({
+                firstname:"john",
+                lastname:"williams",
+                username:"john_123",
+                email:"johnwilliams@gmail.com",
+                dateOfBirth:"2005-03-01"
+            })
+
+            expect(response.statusCode).toBe(200)
+            expect(response.body.success).toBe(true)
+            expect(response.body.message).toBe("Account updated")
+            expect(response.body.data).toBeDefined()
+            expect(response.body.data.id).toBe(testUserAccounts.userAccount1.id)
+            expect(response.body.data.lastname).toBe("williams")
+            expect(response.body.data.email).toBe(testUserAccounts.userAccount1.email)
+
+            //checking update in DB
+            const account = await getAccountFromDb(prisma, {id:testUserAccounts.userAccount1.id})
+            expect(account.id).toBe(testUserAccounts.userAccount1.id)
+            expect(account.lastname).toBe("williams")
+            expect(account.email).toBe(testUserAccounts.userAccount1.email)
+        })
+
         //invalid testcases for update account api
+        //user is not logged in
+        test("Should reject, token is not given", async()=>{
+            //hitting the api without logging in
+            let response = await request(app).put(`/api/account/${testUserAccounts.userAccount1.id}`)
+            .send({
+                firstname:"john",
+                lastname:"williams",
+                username:"john_123",
+                email:"johnwilliams@gmail.com",
+                dateOfBirth:"2005-03-01"
+            })
+            expect(response.statusCode).toBe(401)
+            expect(response.body.success).toBe(false)
+            expect(response.body.message).toBe("Authentication required")
+
+            //checking account in DB (should not be updated)
+            const account = await getAccountFromDb(prisma, {id:testUserAccounts.userAccount1.id})
+            expect(account.id).toBe(testUserAccounts.userAccount1.id)
+            expect(account.lastname).toBe(testUserAccounts.userAccount1.lastname)
+        })
+
+        test.each([
+            [
+                "token is expired",
+                ()=>(
+                    jwt.sign(
+                        {
+                            username: testUserAccounts.userAccount1.username,
+                            accountId: testUserAccounts.userAccount1.id,
+                            isAdmin: false
+                        },
+                        process.env.JWT_SECRET,
+                        { expiresIn: "-1s" }
+                    )
+                )
+            ],
+            [
+                "token is malformed",
+                ()=>(
+                    "randominvalidtoken"
+                )
+            ],
+        ])("Should reject, %s", async(description, getToken)=>{
+
+            const token = getToken()
+            //hitting the api with expired token
+            const response = await request(app).put(`/api/account/${testUserAccounts.userAccount1.id}`)
+            .set("Cookie", `token=${token}`)
+            .send({
+                firstname:"john",
+                lastname:"williams",
+                username:"john_123",
+                email:"johnwilliams@gmail.com",
+                dateOfBirth:"2005-03-01"
+            })
+
+            expect(response.statusCode).toBe(401)
+            expect(response.body.success).toBe(false)
+            expect(response.body.message).toBe("Expired or malformed token")
+
+            //checking account in DB (should not be updated)
+            const account = await getAccountFromDb(prisma, {id:testUserAccounts.userAccount1.id})
+            expect(account.id).toBe(testUserAccounts.userAccount1.id)
+            expect(account.lastname).toBe(testUserAccounts.userAccount1.lastname)
+        })
+        
+        //trying to update account that belongs to another user 
+        test("Should reject, account belongs to another user", async()=>{
+            const agent = request.agent(app)
+
+            //logging in
+            await loginMockUser(
+                agent,
+                testUserAccounts.userAccount1.username,
+                "johnfernandes@123"
+            )
+
+            //hitting update api
+            const response = await agent.put(`/api/account/${testUserAccounts.userAccount2.id}`).send({
+                firstname:"john",
+                lastname:"williams",
+                username:"john_123",
+                email:"johnwilliams@gmail.com",
+                dateOfBirth:"2005-03-01"
+            })
+
+            expect(response.statusCode).toBe(403)
+            expect(response.body.success).toBe(false)
+            expect(response.body.message).toBe("You are not authorized for this action")
+        })
+
+        //username already exists
+        test("Should reject, username already exists", async()=>{
+            const agent = request.agent(app)
+
+            //logging in
+            await loginMockUser(
+                agent,
+                testUserAccounts.userAccount1.username,
+                "johnfernandes@123"
+            )
+
+            //hitting update api
+            const response = await agent.put(`/api/account/${testUserAccounts.userAccount1.id}`).send({
+                firstname:"john",
+                lastname:"williams",
+                username:"linda_123",
+                dateOfBirth:"2005-03-01"
+            })
+
+            expect(response.statusCode).toBe(409)
+            expect(response.body.success).toBe(false)
+            expect(response.body.message).toBe("Username already exists")
+
+            //checking update in DB
+            const account = await getAccountFromDb(prisma, {id:testUserAccounts.userAccount1.id})
+            expect(account.id).toBe(testUserAccounts.userAccount1.id)
+            expect(account.lastname).toBe(testUserAccounts.userAccount1.lastname)
+            expect(account.username).toBe(testUserAccounts.userAccount1.username)
+        })
+
+        //empty input
+        test("Should reject, firstname is not given", async()=>{
+            const agent = request.agent(app)
+
+            //logging in
+            await loginMockUser(
+                agent,
+                testUserAccounts.userAccount1.username,
+                "johnfernandes@123"
+            )
+
+            //hitting update api
+            const response = await agent.put(`/api/account/${testUserAccounts.userAccount1.id}`).send({
+                lastname:"williams",
+                username:"linda_123",
+                dateOfBirth:"2005-03-01"
+            })
+
+            expect(response.statusCode).toBe(400)
+            expect(response.body.success).toBe(false)
+            expect(response.body.message).toBe("All fields are required")
+
+            //checking update in DB
+            const account = await getAccountFromDb(prisma, {id:testUserAccounts.userAccount1.id})
+            expect(account.id).toBe(testUserAccounts.userAccount1.id)
+            expect(account.lastname).toBe(testUserAccounts.userAccount1.lastname)
+            expect(account.username).toBe(testUserAccounts.userAccount1.username)
+            expect(account.firstname).toBe(testUserAccounts.userAccount1.firstname)
+        })
+
     })
 
     //testcases for delete account api
     describe("DELETE : /api/account/:id", ()=>{
         //valid testcases for delete account api
+        test("Should pass, user is logged in and account exists", async()=>{
+            //creating an agent for maintaining
+            //cookies acrosss multiple apis because
+            //auth token is stored in cookies
+            const agent = request.agent(app)
+        
+            //using the same agent for logging in
+            //and deleting account
+            await loginMockUser(
+                agent, 
+                testUserAccounts.userAccount1.username, 
+                "johnfernandes@123"
+            )
+
+            //hitting delete account api
+            const deleteResponse = await agent.delete(`/api/account/${testUserAccounts.userAccount1.id}`)
+
+            expect(deleteResponse.statusCode).toBe(200)
+            expect(deleteResponse.body.success).toBe(true)
+            expect(deleteResponse.body.message).toBe("Account deleted permanently")
+            expect(deleteResponse.body.data).toBeDefined()
+            expect(deleteResponse.body.data.id).toBe(testUserAccounts.userAccount1.id)
+
+            //checking in DB whether account was deleted
+            const account = await getAccountFromDb(prisma, {id:testUserAccounts.userAccount1.id})
+            expect(account).toBeNull()
+
+            //trying to login with the deleted account
+            //(should not login)
+            const loginResponse = await loginMockUser(
+                agent, 
+                testUserAccounts.userAccount1.username, 
+                "johnfernandes@123"
+            )
+
+            expect(loginResponse.statusCode).toBe(401)
+            expect(loginResponse.body.success).toBe(false)
+            expect(loginResponse.body.message).toBe("Invalid username, email or password")
+
+        })
+
         //invalid testcases for delete account api
+
+        //user is not logged in
+        test("Should reject, token is not given", async()=>{
+            //hitting the api without logging in
+            let response = await request(app).delete(`/api/account/${testUserAccounts.userAccount1.id}`)
+            expect(response.statusCode).toBe(401)
+            expect(response.body.success).toBe(false)
+            expect(response.body.message).toBe("Authentication required")
+
+            //checking account in DB (should not be deleted)
+            const account = await getAccountFromDb(prisma, {id:testUserAccounts.userAccount1.id})
+            expect(account).not.toBeNull()
+            expect(account.id).toBe(testUserAccounts.userAccount1.id)
+        })
+
+        test.each([
+            [
+                "token is expired",
+                ()=>(
+                    jwt.sign(
+                        {
+                            username: testUserAccounts.userAccount1.username,
+                            accountId: testUserAccounts.userAccount1.id,
+                            isAdmin: false
+                        },
+                        process.env.JWT_SECRET,
+                        { expiresIn: "-1s" }
+                    )
+                )
+            ],
+            [
+                "token is malformed",
+                ()=>(
+                    "randominvalidtoken"
+                )
+            ],
+        ])("Should reject, %s", async(description, getToken)=>{
+
+            const token = getToken()
+            //hitting the api with expired token
+            const response = await request(app).delete(`/api/account/${testUserAccounts.userAccount1.id}`)
+            .set("Cookie", `token=${token}`)
+
+            expect(response.statusCode).toBe(401)
+            expect(response.body.success).toBe(false)
+            expect(response.body.message).toBe("Expired or malformed token")
+
+            //checking account in DB (should not be deleted)
+            const account = await getAccountFromDb(prisma, {id:testUserAccounts.userAccount1.id})
+            expect(account).not.toBeNull()
+            expect(account.id).toBe(testUserAccounts.userAccount1.id)
+        })
+
     })
 
     //testcases for get profile api
     describe("GET : /api/account/:id", ()=>{
         //valid testcases for get profile api
+        test("Should pass, user is logged in and is accessing his own profile", async()=>{
+            const agent = request.agent(app)
+
+            //logging in
+            await loginMockUser(
+                agent,
+                testUserAccounts.userAccount1.username,
+                "johnfernandes@123"
+            )
+
+            //hitting api
+            const response = await agent.get(`/api/account/${testUserAccounts.userAccount1.id}`)
+            expect(response.statusCode).toBe(200)
+            expect(response.body.success).toBe(true)
+            expect(response.body.message).toBe("Account fetched successfully")
+            expect(response.body.data.id).toBe(testUserAccounts.userAccount1.id)
+            expect(response.body.data.username).toBe(testUserAccounts.userAccount1.username)
+            expect(response.body.data.email).toBe(testUserAccounts.userAccount1.email)
+        })
+
         //invalid testcases for get profile api
+
+        //user is not logged in
+        test("Should reject, token is not given", async()=>{
+            //hitting the api without logging in
+            let response = await request(app).get(`/api/account/${testUserAccounts.userAccount1.id}`)
+            expect(response.statusCode).toBe(401)
+            expect(response.body.success).toBe(false)
+            expect(response.body.message).toBe("Authentication required")
+        })
+
+        test.each([
+            [
+                "token is expired",
+                ()=>(
+                    jwt.sign(
+                        {
+                            username: testUserAccounts.userAccount1.username,
+                            accountId: testUserAccounts.userAccount1.id,
+                            isAdmin: false
+                        },
+                        process.env.JWT_SECRET,
+                        { expiresIn: "-1s" }
+                    )
+                )
+            ],
+            [
+                "token is malformed",
+                ()=>(
+                    "randominvalidtoken"
+                )
+            ],
+        ])("Should reject, %s", async(description, getToken)=>{
+
+            const token = getToken()
+            //hitting the api with expired token
+            const response = await request(app).get(`/api/account/${testUserAccounts.userAccount1.id}`)
+            .set("Cookie", `token=${token}`)
+
+            expect(response.statusCode).toBe(401)
+            expect(response.body.success).toBe(false)
+            expect(response.body.message).toBe("Expired or malformed token")
+        })
+
+        //trying to get profile that belongs to another user 
+        test("Should reject, profile belongs to another user", async()=>{
+            const agent = request.agent(app)
+
+            //logging in
+            await loginMockUser(
+                agent,
+                testUserAccounts.userAccount1.username,
+                "johnfernandes@123"
+            )
+
+            //hitting update api
+            const response = await agent.get(`/api/account/${testUserAccounts.userAccount2.id}`)
+
+            expect(response.statusCode).toBe(403)
+            expect(response.body.success).toBe(false)
+            expect(response.body.message).toBe("You are not authorized for this action")
+        })
     })
 
     //testcases for change password api
     describe("PUT : /api/account/changepassword/:id", ()=>{
         //valid testcases for change password api
+        test("Should pass, user is logged in, account exists, old and new passwords are given", async()=>{
+            const agent = request.agent(app)
+
+            //logging in
+            await loginMockUser(
+                agent,
+                testUserAccounts.userAccount1.username,
+                "johnfernandes@123"
+            )
+
+            //hitting change password api
+            const response = await agent.put(`/api/account/changepassword/${testUserAccounts.userAccount1.id}`).send({
+                oldPassword:"johnfernandes@123",
+                newPassword:"johnfernandes_1234"
+            })
+
+            expect(response.statusCode).toBe(200)
+            expect(response.body.success).toBe(true)
+            expect(response.body.message).toBe("Password updated")
+            expect(response.body.data).toBeDefined()
+            expect(response.body.data.id).toBe(testUserAccounts.userAccount1.id)
+            expect(response.body.data.email).toBe(testUserAccounts.userAccount1.email)
+            expect(response.body.data.username).toBe(testUserAccounts.userAccount1.username)
+            expect(response.body.data.password).not.toBeDefined()
+
+            //checking update in DB
+            const account = await getAccountFromDb(prisma, {id:testUserAccounts.userAccount1.id})
+            expect(account.id).toBe(testUserAccounts.userAccount1.id)
+
+            const isPasswordChanged = await bcrypt.compare("johnfernandes_1234", account.password)
+            expect(isPasswordChanged).toBe(true)
+        })
+
         //invalid testcases for change password api
+
+        //user is not logged in
+        test("Should reject, token is not given", async()=>{
+            //hitting the api without logging in
+            let response = await request(app).put(`/api/account/changepassword/${testUserAccounts.userAccount1.id}`)
+            .send({
+                oldPassword:"johnfernandes@123",
+                newPassword:"johnfernandes_1234"
+            })
+
+            expect(response.statusCode).toBe(401)
+            expect(response.body.success).toBe(false)
+            expect(response.body.message).toBe("Authentication required")
+
+            //checking password in DB (should not be updated)
+            const account = await getAccountFromDb(prisma, {id:testUserAccounts.userAccount1.id})
+            expect(account.id).toBe(testUserAccounts.userAccount1.id)
+            
+            const isPasswordChanged = await bcrypt.compare("johnfernandes_1234", account.password)
+            expect(isPasswordChanged).toBe(false)
+        })
+
+        test.each([
+            [
+                "token is expired",
+                ()=>(
+                    jwt.sign(
+                        {
+                            username: testUserAccounts.userAccount1.username,
+                            accountId: testUserAccounts.userAccount1.id,
+                            isAdmin: false
+                        },
+                        process.env.JWT_SECRET,
+                        { expiresIn: "-1s" }
+                    )
+                )
+            ],
+            [
+                "token is malformed",
+                ()=>(
+                    "randominvalidtoken"
+                )
+            ],
+        ])("Should reject, %s", async(description, getToken)=>{
+
+            const token = getToken()
+            //hitting the api with expired token
+            const response = await request(app).put(`/api/account/changepassword/${testUserAccounts.userAccount1.id}`)
+            .set("Cookie", `token=${token}`)
+            .send({
+                oldPassword:"johnfernandes@123",
+                newPassword:"johnfernandes_1234"
+            })
+
+            expect(response.statusCode).toBe(401)
+            expect(response.body.success).toBe(false)
+            expect(response.body.message).toBe("Expired or malformed token")
+
+            //checking password in DB (should not be updated)
+            const account = await getAccountFromDb(prisma, {id:testUserAccounts.userAccount1.id})
+            expect(account.id).toBe(testUserAccounts.userAccount1.id)
+
+            const isPasswordChanged = await bcrypt.compare("johnfernandes_1234", account.password)
+            expect(isPasswordChanged).toBe(false)
+        })
+        
+        //trying to change another user's password
+        test("Should reject, account belongs to another user", async()=>{
+            const agent = request.agent(app)
+
+            //logging in
+            await loginMockUser(
+                agent,
+                testUserAccounts.userAccount1.username,
+                "johnfernandes@123"
+            )
+
+            //hitting change password api
+            const response = await agent.put(`/api/account/changepassword/${testUserAccounts.userAccount2.id}`).send({
+                oldPassword:"johnfernandes@123",
+                newPassword:"johnfernandes_1234"
+            })
+
+            expect(response.statusCode).toBe(403)
+            expect(response.body.success).toBe(false)
+            expect(response.body.message).toBe("You are not authorized for this action")
+
+            //checking password in DB (should not be updated)
+            const account = await getAccountFromDb(prisma, {id:testUserAccounts.userAccount2.id})
+
+            const isPasswordChanged = await bcrypt.compare("johnfernandes_1234", account.password)
+            expect(isPasswordChanged).toBe(false)
+        })
+
+        //incorrect old password
+        test("Should reject, incorrect old password", async()=>{
+            const agent = request.agent(app)
+
+            //logging in
+            await loginMockUser(
+                agent,
+                testUserAccounts.userAccount1.username,
+                "johnfernandes@123"
+            )
+
+            //hitting update api
+            const response = await agent.put(`/api/account/changepassword/${testUserAccounts.userAccount1.id}`).send({
+                oldPassword:"johnfernandes_123", //<-- _ instead of @
+                newPassword:"johnfernandes_1234"
+            })
+
+            expect(response.statusCode).toBe(401)
+            expect(response.body.success).toBe(false)
+            expect(response.body.message).toBe("Password does not match")
+
+            //checking password in DB (should not be updated)
+            const account = await getAccountFromDb(prisma, {id:testUserAccounts.userAccount1.id})
+
+            const isPasswordNotChanged = await bcrypt.compare("johnfernandes@123", account.password)
+            expect(isPasswordNotChanged).toBe(true)
+        })
+
+        //empty input
+        test.each([
+            [
+                "old password is not given",
+                {
+                    newPassword:"johnfernandes_123"
+                }
+            ],
+            [
+                "new password is not given",
+                {
+                    oldPassword:"johnfernandes@123"
+                }
+            ],
+        ])("Should reject, %s", async(description, body)=>{
+            const agent = request.agent(app)
+
+            //logging in
+            await loginMockUser(
+                agent,
+                testUserAccounts.userAccount1.username,
+                "johnfernandes@123"
+            )
+
+            //hitting update api
+            const response = await agent.put(`/api/account/changepassword/${testUserAccounts.userAccount1.id}`).send(body)
+
+            expect(response.statusCode).toBe(400)
+            expect(response.body.success).toBe(false)
+            expect(response.body.message).toBe("Old and new passwords are required")
+
+            //checking password in DB (should not be updated)
+            const account = await getAccountFromDb(prisma, {id:testUserAccounts.userAccount1.id})
+
+            const isPasswordNotChanged = await bcrypt.compare("johnfernandes@123", account.password)
+            expect(isPasswordNotChanged).toBe(true)
+        })
     })
 })
 
