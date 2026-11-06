@@ -852,21 +852,460 @@ describe("/api/account", ()=>{
 //Testing admin specific apis that can only
 //be accessed through an admin account
 describe("/api/account/admin", ()=>{
+    let testUserAccounts
+    let testAdminAccount
+    let service
+
+    //connecting to test redis client and database
+    //before execution of testcases(once at start)
+    beforeAll(async()=>{
+        await connectTestDataBase()
+        await connectRedis()
+
+    })
+    
+    //creating mock user and admin accounts in test database
+    //before each testcase runs
+    beforeEach(async()=>{
+        testUserAccounts = await createTestUserAccount()
+        testAdminAccount = await createTestAdminAccount()
+        service = new AccountService(prisma)
+    })
+    
+    //cleaning up test database and redis client
+    //after each testcase completes
+    afterEach(async()=>{
+        await cleanupTestDatabase()
+        await cleanupRedis()        
+    })
+
+    //disconnecting test database and redis client
+    //after all testcases complete
+    afterAll(async()=>{
+        await disconnectTestDatabase()
+        await disconnectRedis()
+    })
+
     //testcases for getting accounts lists
     describe("GET : /api/account/admin", ()=>{
         //valid testcases for getting accounts lists
+        test("Should pass, logged in through admin account", async()=>{
+            const agent = request.agent(app)
+
+            //logging in through admin account
+            const loginResponse = await loginMockUser(
+                agent,
+                testAdminAccount.username,
+                "admin@123"
+            )
+            expect(loginResponse.body.message).toBe("Login successful")
+            const response = await agent.get("/api/account/admin")
+            expect(response.body.message).toBe("Accounts fetched")
+            expect(response.body.success).toBe(true)
+            expect(response.statusCode).toBe(200)
+            expect(response.body.data).toBeDefined()
+            expect(Array.isArray(response.body.data)).toBe(true)
+
+            //checking whether accounts passwords were sent in response
+            //(should not be sent)
+
+            const passwords = response.body.data.forEach((account)=>{
+                expect(account.password).not.toBeDefined()
+            })
+        })
+
         //invalid testcases for getting accounts lists
+
+        //user is not logged in
+        test("Should reject, token is not given", async()=>{
+            //hitting the api without logging in
+            let response = await request(app).get("/api/account/admin")
+
+            expect(response.statusCode).toBe(401)
+            expect(response.body.success).toBe(false)
+            expect(response.body.message).toBe("Authentication required")
+            expect(response.body.data).not.toBeDefined()
+        })
+
+        test.each([
+            [
+                "token is expired",
+                ()=>(
+                    jwt.sign(
+                        {
+                            username: testAdminAccount.username,
+                            accountId: testAdminAccount.id,
+                            isAdmin: true
+                        },
+                        process.env.JWT_SECRET,
+                        { expiresIn: "-1s" }
+                    )
+                )
+            ],
+            [
+                "token is malformed",
+                ()=>(
+                    "randominvalidtoken"
+                )
+            ],
+        ])("Should reject, %s", async(description, getToken)=>{
+
+            const token = getToken()
+            //hitting the api with expired token
+            const response = await request(app).get("/api/account/admin")
+            .set("Cookie", `token=${token}`)
+
+            expect(response.statusCode).toBe(401)
+            expect(response.body.success).toBe(false)
+            expect(response.body.message).toBe("Expired or malformed token")
+            expect(response.body.data).not.toBeDefined()
+        })
+
+        //trying to access from a non admin account
+        test("Should reject, logged in through non admin account", async()=>{
+            const agent = request.agent(app)
+
+            //loggin in through admin account
+            await loginMockUser(
+                agent,
+                testUserAccounts.userAccount1.username,
+                "johnfernandes@123"
+            )
+
+            const response = await agent.get("/api/account/admin")
+            expect(response.statusCode).toBe(403)
+            expect(response.body.success).toBe(false)
+            expect(response.body.message).toBe("You are not authorized for this action")
+            expect(response.body.data).not.toBeDefined()
+        })
     })
 
     //testcases for inactivating an account
-    describe("PUT : /api/account/admin/:id", ()=>{
+    describe("PUT : /api/account/admin/inactivate/:id", ()=>{
         //valid testcases for inactivating account
-        //invalid testcases for inactivating account
+        test("Should pass, logged in through admin account and account exists", async()=>{
+            const agent = request.agent(app)
+
+            //logging in through admin account
+            await loginMockUser(
+                agent,
+                testAdminAccount.username,
+                "admin@123"
+            )
+
+            const response = await agent.put(`/api/account/admin/inactivate/${testUserAccounts.userAccount1.id}`)
+            .send({
+                isActive:false
+            })
+            expect(response.statusCode).toBe(200)
+            expect(response.body.success).toBe(true)
+            expect(response.body.message).toBe("Account activity status updated")
+            expect(response.body.data).toBeDefined()
+            expect(response.body.data.id).toBe(testUserAccounts.userAccount1.id)
+
+            //checking whether account activity was updated in DB
+
+            const account = await getAccountFromDb(prisma,{id:testUserAccounts.userAccount1.id})
+            expect(account.isActive).toBe(false)
+            expect(account.id).toBe(testUserAccounts.userAccount1.id)
+        })
+
+        //invalid testcases for inactivating an account
+
+        //user is not logged in
+        test("Should reject, token is not given", async()=>{
+            //hitting the api without logging in
+            let response = await request(app).put(`/api/account/admin/inactivate/${testUserAccounts.userAccount1.id}`).send({
+                isActive:false
+            })
+
+            expect(response.statusCode).toBe(401)
+            expect(response.body.success).toBe(false)
+            expect(response.body.message).toBe("Authentication required")
+            expect(response.body.data).not.toBeDefined()
+
+            //checking whether account activity was updated in DB
+            //(should not be updated)
+
+            const account = await getAccountFromDb(prisma,{id:testUserAccounts.userAccount1.id})
+            expect(account.isActive).toBe(true)
+            expect(account.id).toBe(testUserAccounts.userAccount1.id)
+        })
+
+        test.each([
+            [
+                "token is expired",
+                ()=>(
+                    jwt.sign(
+                        {
+                            username: testAdminAccount.username,
+                            accountId: testAdminAccount.id,
+                            isAdmin: true
+                        },
+                        process.env.JWT_SECRET,
+                        { expiresIn: "-1s" }
+                    )
+                )
+            ],
+            [
+                "token is malformed",
+                ()=>(
+                    "randominvalidtoken"
+                )
+            ],
+        ])("Should reject, %s", async(description, getToken)=>{
+
+            const token = getToken()
+            //hitting the api with expired token
+            const response = await request(app).put(`/api/account/admin/inactivate/${testUserAccounts.userAccount1.id}`)
+            .set("Cookie", `token=${token}`).send({
+                isActive:false
+            })
+
+            expect(response.statusCode).toBe(401)
+            expect(response.body.success).toBe(false)
+            expect(response.body.message).toBe("Expired or malformed token")
+            expect(response.body.data).not.toBeDefined()
+
+            //checking whether account activity was updated in DB
+            //(should not be updated)
+
+            const account = await getAccountFromDb(prisma,{id:testUserAccounts.userAccount1.id})
+            expect(account.isActive).toBe(true)
+            expect(account.id).toBe(testUserAccounts.userAccount1.id)
+        })
+
+        //trying to access from a non admin account
+        test("Should reject, logged in through non admin account", async()=>{
+            const agent = request.agent(app)
+
+            //loggin in through non admin account
+            await loginMockUser(
+                agent,
+                testUserAccounts.userAccount1.username,
+                "johnfernandes@123"
+            )
+
+            const response = await agent.put(`/api/account/admin/inactivate/${testUserAccounts.userAccount1.id}`).send({
+                isActive:false
+            })
+            expect(response.statusCode).toBe(403)
+            expect(response.body.success).toBe(false)
+            expect(response.body.message).toBe("You are not authorized for this action")
+            expect(response.body.data).not.toBeDefined()
+
+            //checking whether account activity was updated in DB
+            //(should not be updated)
+
+            const account = await getAccountFromDb(prisma,{id:testUserAccounts.userAccount1.id})
+            expect(account.isActive).toBe(true)
+            expect(account.id).toBe(testUserAccounts.userAccount1.id)
+        })
+
+        //account does not exist
+        test("Should reject, account does not exist", async()=>{
+            const agent = request.agent(app)
+
+            //loggin in through admin account
+            await loginMockUser(
+                agent,
+                testAdminAccount.username,
+                "admin@123"
+            )
+
+            const response = await agent.put(`/api/account/admin/inactivate/${100}`).send({
+                isActive:false
+            })
+            expect(response.statusCode).toBe(404)
+            expect(response.body.success).toBe(false)
+            expect(response.body.message).toBe("Invalid account id")
+            expect(response.body.data).not.toBeDefined()
+
+        })
+
+        //activity status is not given
+        test("Should reject, activity status is not given", async()=>{
+            const agent = request.agent(app)
+
+            //loggin in through non admin account
+            await loginMockUser(
+                agent,
+                testAdminAccount.username,
+                "admin@123"
+            )
+
+            const response = await agent.put(`/api/account/admin/inactivate/${testUserAccounts.userAccount1.id}`)
+            expect(response.statusCode).toBe(400)
+            expect(response.body.success).toBe(false)
+            expect(response.body.message).toBe("Invalid or missing activity status")
+            expect(response.body.data).not.toBeDefined()
+
+            //checking whether account activity was updated in DB
+            //(should not be updated)
+
+            const account = await getAccountFromDb(prisma,{id:testUserAccounts.userAccount1.id})
+            expect(account.isActive).toBe(true)
+            expect(account.id).toBe(testUserAccounts.userAccount1.id)
+        })
+
+        //invalid activity status
+        test("Should reject, invalid account activity status given", async()=>{
+            const agent = request.agent(app)
+
+            //loggin in through non admin account
+            await loginMockUser(
+                agent,
+                testAdminAccount.username,
+                "admin@123"
+            )
+
+            const response = await agent.put(`/api/account/admin/inactivate/${testUserAccounts.userAccount1.id}`).send({
+                isActive:"randominvalidvalue"
+            })
+            expect(response.statusCode).toBe(400)
+            expect(response.body.success).toBe(false)
+            expect(response.body.message).toBe("Invalid or missing activity status")
+            expect(response.body.data).not.toBeDefined()
+
+            //checking whether account activity was updated in DB
+            //(should not be updated)
+
+            const account = await getAccountFromDb(prisma,{id:testUserAccounts.userAccount1.id})
+            expect(account.isActive).toBe(true)
+            expect(account.id).toBe(testUserAccounts.userAccount1.id)
+        })
     })
 
     //testcases for deleting ANY account
     describe("DELETE : /api/account/admin/:id", ()=>{
-        //valid testcases for deleting ANY account
-        //invalid testcases for deleting ANY account
+        //valid testcases for deleting an account
+        test("Should pass, logged in through admin account and account exists", async()=>{
+            const agent = request.agent(app)
+
+            //logging in through admin account
+            await loginMockUser(
+                agent,
+                testAdminAccount.username,
+                "admin@123"
+            )
+
+            const response = await agent.delete(`/api/account/admin/${testUserAccounts.userAccount1.id}`)
+           
+            expect(response.statusCode).toBe(200)
+            expect(response.body.success).toBe(true)
+            expect(response.body.message).toBe("Account deleted permanently")
+            expect(response.body.data).toBeDefined()
+            expect(response.body.data.id).toBe(testUserAccounts.userAccount1.id)
+
+            //checking whether account was deleted from DB
+
+            const account = await getAccountFromDb(prisma,{id:testUserAccounts.userAccount1.id})
+            expect(account).toBeNull()
+        })
+
+        //invalid testcases for deleting an account
+
+        //user is not logged in
+        test("Should reject, token is not given", async()=>{
+            //hitting the api without logging in
+            let response = await request(app).delete(`/api/account/admin/${testUserAccounts.userAccount1.id}`)
+
+            expect(response.statusCode).toBe(401)
+            expect(response.body.success).toBe(false)
+            expect(response.body.message).toBe("Authentication required")
+            expect(response.body.data).not.toBeDefined()
+
+            //checking whether account was deleted from DB
+            //(should not be deleted)
+
+            const account = await getAccountFromDb(prisma,{id:testUserAccounts.userAccount1.id})
+            expect(account).toBeDefined()
+            expect(account.id).toBe(testUserAccounts.userAccount1.id)
+        })
+
+        test.each([
+            [
+                "token is expired",
+                ()=>(
+                    jwt.sign(
+                        {
+                            username: testAdminAccount.username,
+                            accountId: testAdminAccount.id,
+                            isAdmin: true
+                        },
+                        process.env.JWT_SECRET,
+                        { expiresIn: "-1s" }
+                    )
+                )
+            ],
+            [
+                "token is malformed",
+                ()=>(
+                    "randominvalidtoken"
+                )
+            ],
+        ])("Should reject, %s", async(description, getToken)=>{
+
+            const token = getToken()
+            //hitting the api with expired token
+            const response = await request(app).delete(`/api/account/admin/${testUserAccounts.userAccount1.id}`)
+            .set("Cookie", `token=${token}`)
+
+            expect(response.statusCode).toBe(401)
+            expect(response.body.success).toBe(false)
+            expect(response.body.message).toBe("Expired or malformed token")
+            expect(response.body.data).not.toBeDefined()
+
+            //checking whether account was deleted from DB
+            //(should not be deleted)
+
+            const account = await getAccountFromDb(prisma,{id:testUserAccounts.userAccount1.id})
+            expect(account).toBeDefined()
+            expect(account.id).toBe(testUserAccounts.userAccount1.id)
+        })
+
+        //trying to access from a non admin account
+        test("Should reject, logged in through non admin account", async()=>{
+            const agent = request.agent(app)
+
+            //loggin in through non admin account
+            await loginMockUser(
+                agent,
+                testUserAccounts.userAccount1.username,
+                "johnfernandes@123"
+            )
+
+            const response = await agent.delete(`/api/account/admin/${testUserAccounts.userAccount1.id}`)
+            expect(response.statusCode).toBe(403)
+            expect(response.body.success).toBe(false)
+            expect(response.body.message).toBe("You are not authorized for this action")
+            expect(response.body.data).not.toBeDefined()
+
+            //checking whether account activity was deleted from DB
+            //(should not be deleted)
+
+            const account = await getAccountFromDb(prisma,{id:testUserAccounts.userAccount1.id})
+            expect(account).toBeDefined()
+            expect(account.id).toBe(testUserAccounts.userAccount1.id)
+        })
+
+        //account does not exist
+        test("Should reject, account does not exist", async()=>{
+            const agent = request.agent(app)
+
+            //loggin in through admin account
+            await loginMockUser(
+                agent,
+                testAdminAccount.username,
+                "admin@123"
+            )
+
+            const response = await agent.delete(`/api/account/admin/${100}`)
+            expect(response.statusCode).toBe(404)
+            expect(response.body.success).toBe(false)
+            expect(response.body.message).toBe("Invalid account id")
+            expect(response.body.data).not.toBeDefined()
+
+        })
     })
 })

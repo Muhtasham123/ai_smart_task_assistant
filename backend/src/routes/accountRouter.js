@@ -13,10 +13,16 @@ const authService = new AuthService(prisma)
 const accountController = new AccountController(accountService)
 const adminAccountController = new AdminAccountController(adminAccountService)
 
-
-//Common Admin and General User Routes
 const accountRouter = express.Router()
 
+//Admin specific routes
+accountRouter.get("/admin", authenticate(authService), authorize, adminAccountController.getAllAccounts)
+
+accountRouter.put("/admin/inactivate/:id", authenticate(authService), authorize, adminAccountController.updateAccountActivity)
+
+accountRouter.delete("/admin/:id", authenticate(authService), authorize, adminAccountController.deleteAccount)
+
+//Common Admin and General User Routes
 accountRouter.post("/", accountController.signup)
 
 accountRouter.post("/create", accountController.createAccount)
@@ -28,12 +34,5 @@ accountRouter.put("/:id", authenticate(authService), isAccountOwner, accountCont
 accountRouter.get("/:id", authenticate(authService), isAccountOwner, accountController.getProfile)
 
 accountRouter.delete("/:id", authenticate(authService), isAccountOwner, accountController.deleteAccount)
-
-//Admin specific routes
-accountRouter.get("/admin", authenticate(authService), authorize, adminAccountController.getAllAccounts)
-
-accountRouter.put("/admin/inactivate/:id", authenticate(authService), authorize, adminAccountController.updateAccountActivity)
-
-accountRouter.delete("/admin/:id", authenticate(authService), authorize, adminAccountController.deleteAccount)
 
 module.exports = {accountRouter}

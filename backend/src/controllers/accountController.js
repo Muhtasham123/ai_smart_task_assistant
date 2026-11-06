@@ -203,10 +203,10 @@ class AdminAccountController extends AccountController {
     updateAccountActivity = async(req, res, next) => {
         try {
             const accountId = req.params.id
-            const status = req.body.isActive
+            const status = req.body?.isActive ?? null
 
             if(typeof status !== "boolean"){
-                throw new BadRequestError("Account activity status is required")
+                throw new BadRequestError("Invalid or missing activity status")
             }
 
             const account = await this.accountService.updateAccountActivity(Number(accountId), status)
