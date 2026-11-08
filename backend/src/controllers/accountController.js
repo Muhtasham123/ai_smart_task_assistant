@@ -122,6 +122,8 @@ class AccountController {
                 throw new BadRequestError("Old and new passwords are required")
             }
 
+            new BaseAuthInputsValidator().validatePassword(newPassword)
+
             const account = await this.accountService.changePassword(oldPassword, newPassword, Number(accountId))
 
             res.status(200).json({

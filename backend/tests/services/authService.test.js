@@ -155,7 +155,7 @@ describe("AuthService", ()=>{
         //Invalid testcase for forgotPassword (email does not exist)
         test("Should reject, email does not exist", async()=>{
             await expect(service.forgotPassword("invalidemail@gmail.com")).rejects.toThrow(
-                "If an account exists with this email, a reset link is sent on this email."
+                "If an account exists with this email, a reset link is sent on this email"
             )
         })
     })

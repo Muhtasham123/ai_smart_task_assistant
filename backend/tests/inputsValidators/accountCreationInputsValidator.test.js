@@ -138,4 +138,50 @@ describe("AccountCreationInputsValidator", ()=>{
             "Date of birth must be in YYYY-MM-DD format"
         )
     })
+
+    //invalid email input testcase for validate method
+    test("should reject, invalid email format", ()=>{
+        expect(()=>validator.validate(
+            {
+                username:"muhtasham_123", 
+                firstname:"muhtasham",
+                lastname:"farooqi",
+                dateOfBirth:"2005-03-01",
+                email:"muhtashamfarooqi_gmail.com",
+                password:"muhtasham@123"
+            }
+        )).toThrow(
+            "Please enter a valid email address"
+        )
+    })
+
+    //invalid password input testcase for validate method
+    test.each([
+        [
+            "Password length more than 20 characters",
+            {
+                username:"muhtasham_123", 
+                firstname:"muhtasham",
+                lastname:"farooqi",
+                dateOfBirth:"2005-03-01",
+                email:"muhtashamfarooqi@gmail.com",
+                password:"muhtasham@123012345_@farooi"
+            }
+        ],
+        [
+            "Password length less than 8 characters",
+            {
+                username:"muhtasham_123", 
+                firstname:"muhtasham",
+                lastname:"farooqi",
+                dateOfBirth:"2005-03-01",
+                email:"muhtashamfarooqi@gmail.com",
+                password:"M.m_123"
+            }
+        ]
+    ])("should reject, %s", (description, userAccountDetails)=>{
+        expect(()=>validator.validate(userAccountDetails)).toThrow(
+            "Password must be 8 to 20 characters long"
+        )
+    })
 })

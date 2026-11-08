@@ -5,6 +5,7 @@ class BaseAuthInputsValidator {
     static validUsernamePattern = /^[a-zA-Z0-9_]{8,15}$/ //only allows letters, numbers and underscores and forces to 8-15 characters
 
     static validNamePattern = /^[a-zA-Z]{3,19}$/ //only allows letters and forces 3-19 characters
+    static validEmailPattern = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
 
     static dateOfBirthPattern = /^\d{4}-\d{2}-\d{2}$/
     static minimumAge = 13
@@ -20,6 +21,18 @@ class BaseAuthInputsValidator {
     validateName(name){
         if(!BaseAuthInputsValidator.validNamePattern.test(name)){
             throw new BadRequestError("Name must be between 3-19 characters and can only contain letters")
+        }
+    }
+
+    validateEmail(email){
+        if(!BaseAuthInputsValidator.validEmailPattern.test(email)){
+            throw new BadRequestError("Please enter a valid email address")
+        }
+    }
+
+    validatePassword(password){
+        if(password.length > 20 || password.length < 8){
+            throw new BadRequestError("Password must be 8 to 20 characters long")
         }
     }
 
@@ -90,6 +103,9 @@ class LoginInputsValidator extends BaseAuthInputsValidator {
         if(username){
             this.validateUsername(username)
         }
+        if(email){
+            this.validateEmail(email)
+        }
     }
 }
 
@@ -113,6 +129,8 @@ class AccountCreationInputsValidator extends BaseAuthInputsValidator{
         this.validateName(firstname)
         this.validateName(lastname)
         this.validateDateOfBirth(dateOfBirth)
+        this.validateEmail(email)
+        this.validatePassword(password)
     }
 }
 

@@ -21,7 +21,7 @@ describe("LoginInputsValidator", ()=>{
         )).not.toThrow()
     })
 
-    //valid testcase for the validate method (login with both username only, not email)
+    //valid testcase for the validate method (login with username only, not email)
     test("Should accept, username and password are given", ()=>{
         expect(()=>validator.validate(
             "muhtasham_123", 
@@ -78,6 +78,17 @@ describe("LoginInputsValidator", ()=>{
             "muhtasham@123"
         )).toThrow(
             "Username must be 8-15 characters and can only contain letters, numbers and underscores"
+        )
+    })
+
+    //testcase for invalid email input
+    test("should reject, email is invalid", ()=>{
+        expect(()=>validator.validate(
+            "",
+            "aka@gmail_com",
+            "muhtasham@123"
+        )).toThrow(
+            "Please enter a valid email address"
         )
     })
 })
