@@ -1,8 +1,8 @@
 const {BadRequestError, ErrorModel} = require("../errors/appError")
-const {LoginInputsValidator} = require("../validators/authInputsValidators") 
+const {LoginInputsValidator, BaseAuthInputsValidator} = require("../validators/authInputsValidators") 
 
 class AuthController {
-    static COOKIE_EXPIRY_TIME = 3 * 60 * 1000 * 1000
+    static COOKIE_EXPIRY_TIME = 3 * 60 * 60 * 1000
 
     constructor(authService){
         this.authService = authService
@@ -116,6 +116,8 @@ class AuthController {
             if(!newPassword || !resetToken){
                 throw new BadRequestError("Password and reset token are required")
             }
+
+            new BaseAuthInputsValidator().validatePassword(newPassword)
 
             const updatedAccount = await this.authService.resetPassword(resetToken, newPassword)
 
